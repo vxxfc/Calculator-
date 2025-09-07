@@ -8,62 +8,43 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 360
+    timeout-minutes: 60 # Reduced to 60 minutes (default), increase if builds need longer
+
     env:
-      # ensure docker pull/run do not use buildkit (avoids "unsupported media type" errors)
       DOCKER_BUILDKIT: "0"
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Show repo root (debug)
+      - name: Check for buildozer.spec
         run: |
-          echo "Workspace: $GITHUB_WORKSPACE"
-          ls -la
-
-      - name: Check buildozer.spec present (debug)
-        run: |
-          if [ -f buildozer.spec ]; then
-            echo "buildozer.spec found:"
-            sed -n '1,200p' buildozer.spec || true
-          else
-            echo "ERROR: buildozer.spec not found in repo root!"
-            ls -la
+          if [ ! -f buildozer.spec ]; then
+            echo "ERROR: buildozer.spec not found! Please create it with 'buildozer init'."
             exit 1
           fi
 
-      - name: Ensure cache dir for buildozer
+      - name: Prepare Buildozer cache directory
         run: mkdir -p $HOME/.buildozer
 
-      - name: Pull kivy/buildozer Docker image (with BuildKit disabled)
-        run: |
-          echo "Pulling kivy/buildozer image"
-          docker pull kivy/buildozer:latest
+      - name: Pull Buildozer Docker image
+        run: docker pull kivy/buildozer:latest
 
-      - name: Build APK inside Docker
+      - name: Build APK using Buildozer in Docker
         run: |
-          set -eux
-
-          # create bin dir so ownership fix won't fail
           mkdir -p bin
-
-          # run buildozer inside the container, mounting repo and cache
           docker run --rm \
             -v "${{ github.workspace }}":/home/user/hostcwd \
             -v "$HOME/.buildozer":/home/user/.buildozer \
             -w /home/user/hostcwd \
             kivy/buildozer:latest \
-            /bin/bash -lc "buildozer -v android debug"
-
-          # fix ownership so the runner/Actions UI can read artifacts
+            /bin/bash -c "buildozer -v android debug"
           sudo chown -R $(id -u):$(id -g) bin || true
 
-      - name: Show build output (debug)
+      - name: List output files (debug)
         run: |
-          echo "Listing bin/ and ./.buildozer:"
-          ls -la bin || true
-          ls -la .buildozer || true
+          echo "APK files in bin/:"
+          ls -la bin/*.apk || echo "No APK produced!"
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
