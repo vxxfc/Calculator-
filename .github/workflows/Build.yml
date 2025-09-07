@@ -1,17 +1,27 @@
-name: Build APK
-on: [push]
+image: kivy/buildozer:latest
 
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Build with Buildozer
-        uses: ArtemSBulgakov/buildozer-action@v1
-        with:
-          buildozer_version: stable
-          target: android debug
-      - uses: actions/upload-artifact@v3
-        with:
-          name: package
-          path: bin/*.apk
+stages:
+  - build
+
+variables:
+  LC_ALL: C.UTF-8
+  LANG: C.UTF-8
+
+before_script:
+  - apt-get update -y
+  - apt-get install -y python3-pip zip git openjdk-11-jdk
+
+android_build:
+  stage: build
+  script:
+    - pip install --upgrade pip
+    - pip install buildozer cython virtualenv
+    - buildozer android clean
+    - buildozer android debug
+  artifacts:
+    paths:
+      - bin/*.apk
+    expire_in: 1 week
+  only:
+    - main
+    - master
