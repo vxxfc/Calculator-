@@ -1,27 +1,46 @@
-image: kivy/buildozer:latest
+name: Build APK (Buildozer Docker)
 
-stages:
-  - build
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
 
-variables:
-  LC_ALL: C.UTF-8
-  LANG: C.UTF-8
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
 
-before_script:
-  - apt-get update -y
-  - apt-get install -y python3-pip zip git openjdk-11-jdk
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-android_build:
-  stage: build
-  script:
-    - pip install --upgrade pip
-    - pip install buildozer cython virtualenv
-    - buildozer android clean
-    - buildozer android debug
-  artifacts:
-    paths:
-      - bin/*.apk
-    expire_in: 1 week
-  only:
-    - main
-    - master
+      - name: Show repo files (for debug)
+        run: ls -la
+
+      - name: Pull kivy/buildozer Docker image
+        run: docker pull kivy/buildozer:latest
+
+      - name: Build APK (inside Docker)
+        run: |
+          # create persistent cache dir to speed subsequent builds
+          mkdir -p $HOME/.buildozer
+
+          # run buildozer inside the container, mounting the repo and cache folder
+          docker run --rm \
+            -v "${{ github.workspace }}":/home/user/hostcwd \
+            -v "$HOME/.buildozer":/home/user/.buildozer \
+            -w /home/user/hostcwd \
+            kivy/buildozer:latest \
+            buildozer -v android debug
+
+          # fix potential ownership issues so the runner can upload artifacts
+          sudo chown -R $(id -u):$(id -g) bin || true
+
+      - name: List build output (for debug)
+        run: ls -la bin || true
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: calculator-apk
+          path: bin/*.apk
