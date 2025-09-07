@@ -14,33 +14,22 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Show repo files (for debug)
-        run: ls -la
-
       - name: Pull kivy/buildozer Docker image
         run: docker pull kivy/buildozer:latest
 
-      - name: Build APK (inside Docker)
+      - name: Build APK
         run: |
-          # create persistent cache dir to speed subsequent builds
           mkdir -p $HOME/.buildozer
-
-          # run buildozer inside the container, mounting the repo and cache folder
           docker run --rm \
             -v "${{ github.workspace }}":/home/user/hostcwd \
             -v "$HOME/.buildozer":/home/user/.buildozer \
             -w /home/user/hostcwd \
             kivy/buildozer:latest \
             buildozer -v android debug
-
-          # fix potential ownership issues so the runner can upload artifacts
           sudo chown -R $(id -u):$(id -g) bin || true
 
-      - name: List build output (for debug)
-        run: ls -la bin || true
-
       - name: Upload APK artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: calculator-apk
           path: bin/*.apk
