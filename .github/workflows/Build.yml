@@ -14,18 +14,23 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Pull kivy/buildozer Docker image
-        run: docker pull kivy/buildozer:latest
+      - name: Disable BuildKit & pull kivy/buildozer image
+        run: |
+          export DOCKER_BUILDKIT=0
+          docker pull kivy/buildozer:latest
 
-      - name: Build APK
+      - name: Build APK inside Docker
         run: |
           mkdir -p $HOME/.buildozer
+          export DOCKER_BUILDKIT=0
           docker run --rm \
             -v "${{ github.workspace }}":/home/user/hostcwd \
             -v "$HOME/.buildozer":/home/user/.buildozer \
             -w /home/user/hostcwd \
             kivy/buildozer:latest \
             buildozer -v android debug
+
+          # fix ownership so artifacts can be uploaded
           sudo chown -R $(id -u):$(id -g) bin || true
 
       - name: Upload APK artifact
