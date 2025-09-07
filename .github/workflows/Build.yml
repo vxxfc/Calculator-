@@ -9,29 +9,61 @@ jobs:
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 360
+    env:
+      # ensure docker pull/run do not use buildkit (avoids "unsupported media type" errors)
+      DOCKER_BUILDKIT: "0"
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Disable BuildKit & pull kivy/buildozer image
+      - name: Show repo root (debug)
         run: |
-          export DOCKER_BUILDKIT=0
+          echo "Workspace: $GITHUB_WORKSPACE"
+          ls -la
+
+      - name: Check buildozer.spec present (debug)
+        run: |
+          if [ -f buildozer.spec ]; then
+            echo "buildozer.spec found:"
+            sed -n '1,200p' buildozer.spec || true
+          else
+            echo "ERROR: buildozer.spec not found in repo root!"
+            ls -la
+            exit 1
+          fi
+
+      - name: Ensure cache dir for buildozer
+        run: mkdir -p $HOME/.buildozer
+
+      - name: Pull kivy/buildozer Docker image (with BuildKit disabled)
+        run: |
+          echo "Pulling kivy/buildozer image"
           docker pull kivy/buildozer:latest
 
       - name: Build APK inside Docker
         run: |
-          mkdir -p $HOME/.buildozer
-          export DOCKER_BUILDKIT=0
+          set -eux
+
+          # create bin dir so ownership fix won't fail
+          mkdir -p bin
+
+          # run buildozer inside the container, mounting repo and cache
           docker run --rm \
             -v "${{ github.workspace }}":/home/user/hostcwd \
             -v "$HOME/.buildozer":/home/user/.buildozer \
             -w /home/user/hostcwd \
             kivy/buildozer:latest \
-            buildozer -v android debug
+            /bin/bash -lc "buildozer -v android debug"
 
-          # fix ownership so artifacts can be uploaded
+          # fix ownership so the runner/Actions UI can read artifacts
           sudo chown -R $(id -u):$(id -g) bin || true
+
+      - name: Show build output (debug)
+        run: |
+          echo "Listing bin/ and ./.buildozer:"
+          ls -la bin || true
+          ls -la .buildozer || true
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
